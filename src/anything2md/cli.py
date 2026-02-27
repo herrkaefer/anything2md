@@ -38,6 +38,12 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Print progress messages to stderr.",
     )
+    parser.add_argument(
+        "--url-strategy",
+        choices=["auto", "download", "browser"],
+        default="auto",
+        help="URL conversion strategy. Web URL path tries Accept:text/markdown first, then browser-rendering fallback.",
+    )
     parser.add_argument("-o", "--output", help="Output markdown file path. Defaults to stdout.")
     return parser.parse_args()
 
@@ -76,7 +82,11 @@ def main() -> None:
     try:
         try:
             if _is_remote_url(args.input):
-                result = converter.convert_url(args.input, progress_callback=progress_callback)
+                result = converter.convert_remote_url(
+                    args.input,
+                    strategy=args.url_strategy,
+                    progress_callback=progress_callback,
+                )
             else:
                 result = converter.convert_file(
                     Path(args.input).expanduser(),

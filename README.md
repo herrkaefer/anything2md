@@ -6,6 +6,8 @@ Cloudflare docs:
 - Markdown Conversion overview: https://developers.cloudflare.com/workers-ai/features/markdown-conversion/
 - API reference (`toMarkdown`): https://developers.cloudflare.com/api/resources/ai/methods/run/#to-markdown-conversion-to-markdown
 - API reference (`supported formats`): https://developers.cloudflare.com/api/resources/ai/methods/run/#to-markdown-conversion-supported-formats
+- Browser Rendering Markdown endpoint (URL input): https://developers.cloudflare.com/browser-rendering/rest-api/markdown-endpoint/
+- Markdown for Agents (`Accept: text/markdown`): https://developers.cloudflare.com/fundamentals/reference/markdown-for-agents/
 
 ## Install
 
@@ -40,6 +42,12 @@ print(result.markdown)
 image_result = converter.convert_url("https://pub-979cb28270cc461d94bc8a169d8f389d.r2.dev/cat.jpeg")
 print(image_result.markdown)
 
+# Webpage URL example:
+# 1) try Accept: text/markdown (Markdown for Agents)
+# 2) fallback to Cloudflare Browser Rendering Markdown endpoint
+web_result = converter.convert_web_url("https://developers.cloudflare.com/")
+print(web_result.markdown)
+
 file_result = converter.convert_file("/path/to/file.pdf")
 print(file_result.markdown)
 
@@ -70,6 +78,7 @@ export CLOUDFLARE_API_TOKEN="your_api_token"
 
 uv run anything2md https://pub-979cb28270cc461d94bc8a169d8f389d.r2.dev/somatosensory.pdf
 uv run anything2md https://pub-979cb28270cc461d94bc8a169d8f389d.r2.dev/cat.jpeg -o output.md
+uv run anything2md https://developers.cloudflare.com/
 ```
 
 Run as module (alternative):
@@ -82,4 +91,19 @@ Installed command (after `pip install` or from PyPI):
 
 ```bash
 anything2md https://pub-979cb28270cc461d94bc8a169d8f389d.r2.dev/somatosensory.pdf
+```
+
+URL strategy control:
+
+```bash
+# auto:
+# - document URL -> ai/tomarkdown
+# - webpage URL -> try Accept:text/markdown, fallback browser-rendering/markdown
+uv run anything2md --url-strategy auto https://developers.cloudflare.com/
+
+# force webpage URL flow (Accept:text/markdown first, fallback browser-rendering/markdown)
+uv run anything2md --url-strategy browser https://example.com
+
+# force remote download + ai/tomarkdown
+uv run anything2md --url-strategy download https://example.com/sample.pdf
 ```

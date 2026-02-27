@@ -86,6 +86,26 @@ class CloudflareClient:
         except (TypeError, ValueError, KeyError) as exc:
             raise InvalidResponseError() from exc
 
+    def markdown_from_url(self, url: str, **options: Any) -> str:
+        endpoint = (
+            f"https://api.cloudflare.com/client/v4/accounts/{self.credentials.account_id}/"
+            "browser-rendering/markdown"
+        )
+        payload: dict[str, Any] = {"url": url}
+        payload.update(options)
+
+        response = self._request_with_retry(
+            method="POST",
+            endpoint=endpoint,
+            json=payload,
+        )
+
+        decoded = self._decode_success_payload(response)
+        result_payload = decoded.get("result")
+        if not isinstance(result_payload, str):
+            raise InvalidResponseError()
+        return result_payload
+
     def close(self) -> None:
         self._session.close()
 

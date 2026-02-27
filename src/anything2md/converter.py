@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Callable
+from typing import Literal
 from typing import Sequence
 from urllib.parse import urlparse
 
@@ -118,11 +119,83 @@ class MarkdownConverter:
     def supported_formats(self) -> list[SupportedFormatInfo]:
         return self._client.supported_formats()
 
+    def convert_web_url(
+        self,
+        url: str,
+        progress_callback: Callable[[str], None] | None = None,
+    ) -> ConversionResult:
+        self._notify(progress_callback, f"Trying Markdown for Agents for URL: {url}")
+
+        try:
+            response = self._download_session.get(
+                url,
+                headers={"Accept": "text/markdown"},
+                timeout=self.options.timeout,
+            )
+            content_type = response.headers.get("content-type", "").lower()
+
+            if 200 <= response.status_code < 300 and "text/markdown" in content_type:
+                token_header = response.headers.get("x-markdown-tokens")
+                tokens: int | None
+                if token_header is None:
+                    tokens = None
+                else:
+                    try:
+                        tokens = int(token_header)
+                    except ValueError:
+                        tokens = None
+                self._notify(progress_callback, "Markdown for Agents succeeded.")
+                return ConversionResult(
+                    name=url,
+                    mime_type="text/markdown",
+                    format="markdown",
+                    tokens=tokens,
+                    markdown=response.text,
+                    error=None,
+                )
+
+            self._notify(
+                progress_callback,
+                "Markdown for Agents unavailable for this URL, falling back to Browser Rendering.",
+            )
+        except httpx.HTTPError:
+            self._notify(
+                progress_callback,
+                "Markdown for Agents request failed, falling back to Browser Rendering.",
+            )
+
+        self._notify(progress_callback, f"Rendering webpage URL via Cloudflare Browser Rendering: {url}")
+        markdown = self._client.markdown_from_url(url)
+        self._notify(progress_callback, "Webpage conversion completed.")
+        return ConversionResult(
+            name=url,
+            mime_type="text/html",
+            format="markdown",
+            tokens=None,
+            markdown=markdown,
+            error=None,
+        )
+
+    def convert_remote_url(
+        self,
+        url: str,
+        strategy: Literal["auto", "download", "browser"] = "auto",
+        progress_callback: Callable[[str], None] | None = None,
+    ) -> ConversionResult:
+        if strategy == "download":
+            return self.convert_url(url, progress_callback=progress_callback)
+        if strategy == "browser":
+            return self.convert_web_url(url, progress_callback=progress_callback)
+
+        if self._looks_like_supported_document_url(url):
+            return self.convert_url(url, progress_callback=progress_callback)
+        return self.convert_web_url(url, progress_callback=progress_callback)
+
     def convert(self, input_value: str | Path) -> ConversionResult:
         text = str(input_value)
         parsed = urlparse(text)
         if parsed.scheme in {"http", "https"} and parsed.netloc:
-            return self.convert_url(text)
+            return self.convert_remote_url(text, strategy="auto")
         return self.convert_file(text)
 
     def close(self) -> None:
@@ -140,6 +213,11 @@ class MarkdownConverter:
             return f"downloaded.{by_mime.file_extension}"
 
         return candidate or "downloaded"
+
+    @staticmethod
+    def _looks_like_supported_document_url(url: str) -> bool:
+        candidate = Path(urlparse(url).path).name
+        return bool(candidate and from_filename(candidate) is not None)
 
     @staticmethod
     def _notify(callback: Callable[[str], None] | None, message: str) -> None:

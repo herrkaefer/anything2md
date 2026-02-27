@@ -202,3 +202,22 @@ def test_supported_formats_returns_endpoint_result() -> None:
     result = client.supported_formats()
     assert [item.extension for item in result] == ["pdf", "jpeg"]
     assert [item.mime_type for item in result] == ["application/pdf", "image/jpeg"]
+
+
+def test_markdown_from_url_returns_markdown_string() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.method == "POST"
+        assert str(request.url).endswith("/browser-rendering/markdown")
+        body = request.read().decode("utf-8")
+        assert "\"url\":\"https://example.com\"" in body
+        payload = {
+            "result": "# Hello from webpage",
+            "success": True,
+            "errors": [],
+            "messages": [],
+        }
+        return httpx.Response(200, json=payload)
+
+    client = make_client(handler)
+    markdown = client.markdown_from_url("https://example.com")
+    assert markdown == "# Hello from webpage"

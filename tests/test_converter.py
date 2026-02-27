@@ -185,3 +185,117 @@ def test_supported_formats_passthrough() -> None:
     assert len(result) == 1
     assert result[0].extension == "pdf"
     assert result[0].mime_type == "application/pdf"
+
+
+def test_convert_remote_url_auto_uses_browser_for_webpages() -> None:
+    def download_handler(request: httpx.Request) -> httpx.Response:
+        assert request.headers.get("accept") == "text/markdown"
+        return httpx.Response(406, text="Not Acceptable")
+
+    def upload_handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "POST" and str(request.url).endswith("/browser-rendering/markdown"):
+            return httpx.Response(
+                200,
+                json={
+                    "result": "# Web markdown",
+                    "success": True,
+                    "errors": [],
+                    "messages": [],
+                },
+            )
+        raise AssertionError(f"Unexpected request: {request.method} {request.url}")
+
+    converter = MarkdownConverter(
+        credentials=CloudflareCredentials(account_id="acc", api_token="token"),
+        client=make_upload_client(upload_handler),
+        download_session=make_download_session(download_handler),
+    )
+
+    result = converter.convert_remote_url("https://example.com/page")
+    assert result.markdown == "# Web markdown"
+    assert result.mime_type == "text/html"
+    assert result.tokens is None
+
+
+def test_convert_web_url_uses_markdown_for_agents_when_available() -> None:
+    def download_handler(request: httpx.Request) -> httpx.Response:
+        assert request.headers.get("accept") == "text/markdown"
+        return httpx.Response(
+            200,
+            text="# Markdown for Agents",
+            headers={"Content-Type": "text/markdown; charset=utf-8", "X-Markdown-Tokens": "123"},
+        )
+
+    def upload_handler(request: httpx.Request) -> httpx.Response:
+        raise AssertionError(f"Browser fallback should not be called: {request.method} {request.url}")
+
+    converter = MarkdownConverter(
+        credentials=CloudflareCredentials(account_id="acc", api_token="token"),
+        client=make_upload_client(upload_handler),
+        download_session=make_download_session(download_handler),
+    )
+
+    result = converter.convert_web_url("https://example.com/page")
+    assert result.markdown == "# Markdown for Agents"
+    assert result.mime_type == "text/markdown"
+    assert result.tokens == 123
+    assert result.error is None
+
+
+def test_convert_web_url_falls_back_to_browser_on_markdown_for_agents_exception() -> None:
+    def download_handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ReadTimeout("timeout", request=request)
+
+    def upload_handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "POST" and str(request.url).endswith("/browser-rendering/markdown"):
+            return httpx.Response(
+                200,
+                json={"result": "# Fallback markdown", "success": True, "errors": [], "messages": []},
+            )
+        raise AssertionError(f"Unexpected request: {request.method} {request.url}")
+
+    converter = MarkdownConverter(
+        credentials=CloudflareCredentials(account_id="acc", api_token="token"),
+        client=make_upload_client(upload_handler),
+        download_session=make_download_session(download_handler),
+    )
+
+    result = converter.convert_web_url("https://example.com/page")
+    assert result.markdown == "# Fallback markdown"
+    assert result.mime_type == "text/html"
+
+
+def test_convert_remote_url_auto_uses_download_for_document_urls() -> None:
+    def download_handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, content=b"%PDF-1.4", headers={"Content-Type": "application/pdf"})
+
+    def upload_handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "POST" and str(request.url).endswith("/ai/tomarkdown"):
+            return httpx.Response(
+                200,
+                json={
+                    "result": [
+                        {
+                            "name": "sample.pdf",
+                            "mimeType": "application/pdf",
+                            "format": "markdown",
+                            "tokens": 7,
+                            "data": "# File markdown",
+                        }
+                    ],
+                    "success": True,
+                    "errors": [],
+                    "messages": [],
+                },
+            )
+        raise AssertionError(f"Unexpected request: {request.method} {request.url}")
+
+    converter = MarkdownConverter(
+        credentials=CloudflareCredentials(account_id="acc", api_token="token"),
+        client=make_upload_client(upload_handler),
+        download_session=make_download_session(download_handler),
+    )
+
+    result = converter.convert_remote_url("https://example.com/sample.pdf")
+    assert result.markdown == "# File markdown"
+    assert result.tokens == 7
