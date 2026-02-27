@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import httpx
@@ -282,6 +283,74 @@ def test_convert_remote_url_auto_uses_browser_for_webpages() -> None:
     assert result.markdown == "# Web markdown"
     assert result.mime_type == "text/html"
     assert result.tokens is None
+
+
+def test_convert_remote_url_browser_forwards_advanced_options() -> None:
+    def download_handler(request: httpx.Request) -> httpx.Response:
+        assert request.headers.get("accept") == "text/markdown"
+        return httpx.Response(406, text="Not Acceptable")
+
+    def upload_handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "POST" and str(request.url).endswith("/browser-rendering/markdown"):
+            body = json.loads(request.read().decode("utf-8"))
+            assert body == {
+                "url": "https://example.com/page",
+                "gotoOptions": {"waitUntil": "networkidle2"},
+                "rejectRequestPattern": ["/^.*\\.(css)$/", "/analytics/"],
+            }
+            return httpx.Response(
+                200,
+                json={
+                    "result": "# Web markdown",
+                    "success": True,
+                    "errors": [],
+                    "messages": [],
+                },
+            )
+        raise AssertionError(f"Unexpected request: {request.method} {request.url}")
+
+    converter = MarkdownConverter(
+        credentials=CloudflareCredentials(account_id="acc", api_token="token"),
+        client=make_upload_client(upload_handler),
+        download_session=make_download_session(download_handler),
+    )
+
+    result = converter.convert_remote_url(
+        "https://example.com/page",
+        strategy="browser",
+        wait_until="networkidle2",
+        reject_request_pattern=["/^.*\\.(css)$/", "/analytics/"],
+    )
+    assert result.markdown == "# Web markdown"
+    assert result.mime_type == "text/html"
+
+
+def test_convert_web_url_rejects_invalid_wait_until() -> None:
+    converter = MarkdownConverter(
+        credentials=CloudflareCredentials(account_id="acc", api_token="token"),
+        client=make_upload_client(lambda _: httpx.Response(500)),
+        download_session=make_download_session(lambda _: httpx.Response(406, text="Not Acceptable")),
+    )
+
+    with pytest.raises(ValueError, match="wait_until"):
+        converter.convert_web_url("https://example.com/page", wait_until="load")  # type: ignore[arg-type]
+
+
+def test_convert_web_url_rejects_invalid_reject_request_pattern() -> None:
+    converter = MarkdownConverter(
+        credentials=CloudflareCredentials(account_id="acc", api_token="token"),
+        client=make_upload_client(lambda _: httpx.Response(500)),
+        download_session=make_download_session(lambda _: httpx.Response(406, text="Not Acceptable")),
+    )
+
+    with pytest.raises(ValueError, match="at least one pattern"):
+        converter.convert_web_url("https://example.com/page", reject_request_pattern=[])
+
+    with pytest.raises(ValueError, match="only strings"):
+        converter.convert_web_url(
+            "https://example.com/page",
+            reject_request_pattern=["/style/", 123],  # type: ignore[list-item]
+        )
 
 
 def test_convert_web_url_uses_markdown_for_agents_when_available() -> None:

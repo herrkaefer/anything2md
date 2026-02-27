@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 from urllib.parse import urlparse
 
-from .config import ConvertOptions
+from .config import ConvertOptions, VALID_BROWSER_WAIT_UNTIL
 from .converter import MarkdownConverter
 from .errors import Anything2MDError
 
@@ -43,6 +43,17 @@ def parse_args() -> argparse.Namespace:
         choices=["auto", "download", "browser"],
         default="auto",
         help="URL conversion strategy. Web URL path tries Accept:text/markdown first, then browser-rendering fallback.",
+    )
+    parser.add_argument(
+        "--wait-until",
+        choices=VALID_BROWSER_WAIT_UNTIL,
+        help="Browser Rendering gotoOptions.waitUntil value for webpage URLs.",
+    )
+    parser.add_argument(
+        "--reject-request-pattern",
+        action="append",
+        default=None,
+        help="Regex pattern for Browser Rendering rejectRequestPattern. Repeat to pass multiple patterns.",
     )
     parser.add_argument("-o", "--output", help="Output markdown file path. Defaults to stdout.")
     return parser.parse_args()
@@ -87,6 +98,8 @@ def main() -> None:
             result = converter.transform(
                 local_or_remote_input,
                 url_strategy=args.url_strategy,
+                wait_until=args.wait_until,
+                reject_request_pattern=args.reject_request_pattern,
                 progress_callback=progress_callback,
             )
             if isinstance(result, list):

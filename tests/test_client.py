@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 import httpx
 import pytest
 
@@ -220,4 +222,31 @@ def test_markdown_from_url_returns_markdown_string() -> None:
 
     client = make_client(handler)
     markdown = client.markdown_from_url("https://example.com")
+    assert markdown == "# Hello from webpage"
+
+
+def test_markdown_from_url_supports_advanced_options_payload() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.method == "POST"
+        assert str(request.url).endswith("/browser-rendering/markdown")
+        body = json.loads(request.read().decode("utf-8"))
+        assert body == {
+            "url": "https://example.com",
+            "gotoOptions": {"waitUntil": "networkidle0"},
+            "rejectRequestPattern": ["/^.*\\.(png)$/"],
+        }
+        payload = {
+            "result": "# Hello from webpage",
+            "success": True,
+            "errors": [],
+            "messages": [],
+        }
+        return httpx.Response(200, json=payload)
+
+    client = make_client(handler)
+    markdown = client.markdown_from_url(
+        "https://example.com",
+        gotoOptions={"waitUntil": "networkidle0"},
+        rejectRequestPattern=["/^.*\\.(png)$/"],
+    )
     assert markdown == "# Hello from webpage"

@@ -8,7 +8,12 @@ import weakref
 import httpx
 
 from .client import CloudflareClient
-from .config import CloudflareCredentials, ConvertOptions
+from .config import (
+    BrowserWaitUntil,
+    CloudflareCredentials,
+    ConvertOptions,
+    VALID_BROWSER_WAIT_UNTIL,
+)
 from .errors import (
     APIError,
     FileReadError,
@@ -89,6 +94,8 @@ class MarkdownConverter:
         *,
         filename: str | None = None,
         url_strategy: Literal["auto", "download", "browser"] = "auto",
+        wait_until: BrowserWaitUntil | None = None,
+        reject_request_pattern: str | Sequence[str] | None = None,
         progress_callback: Callable[[str], None] | None = None,
     ) -> ConversionResult | list[ConversionResult]:
         """Transform any supported input through one API.
@@ -107,6 +114,8 @@ class MarkdownConverter:
                 return self.convert_remote_url(
                     text,
                     strategy=url_strategy,
+                    wait_until=wait_until,
+                    reject_request_pattern=reject_request_pattern,
                     progress_callback=progress_callback,
                 )
             return self.convert_file(text, progress_callback=progress_callback)
@@ -199,8 +208,14 @@ class MarkdownConverter:
     def convert_web_url(
         self,
         url: str,
+        wait_until: BrowserWaitUntil | None = None,
+        reject_request_pattern: str | Sequence[str] | None = None,
         progress_callback: Callable[[str], None] | None = None,
     ) -> ConversionResult:
+        browser_markdown_options = self._build_browser_markdown_options(
+            wait_until=wait_until,
+            reject_request_pattern=reject_request_pattern,
+        )
         self._notify(progress_callback, f"Trying Markdown for Agents for URL: {url}")
 
         try:
@@ -243,7 +258,7 @@ class MarkdownConverter:
 
         self._notify(progress_callback, f"Rendering webpage URL via Cloudflare Browser Rendering: {url}")
         try:
-            markdown = self._client.markdown_from_url(url)
+            markdown = self._client.markdown_from_url(url, **browser_markdown_options)
         except HTTPError as exc:
             if exc.status_code in {401, 403}:
                 self._notify(
@@ -266,16 +281,68 @@ class MarkdownConverter:
         self,
         url: str,
         strategy: Literal["auto", "download", "browser"] = "auto",
+        wait_until: BrowserWaitUntil | None = None,
+        reject_request_pattern: str | Sequence[str] | None = None,
         progress_callback: Callable[[str], None] | None = None,
     ) -> ConversionResult:
         if strategy == "download":
             return self.convert_url(url, progress_callback=progress_callback)
         if strategy == "browser":
-            return self.convert_web_url(url, progress_callback=progress_callback)
+            return self.convert_web_url(
+                url,
+                wait_until=wait_until,
+                reject_request_pattern=reject_request_pattern,
+                progress_callback=progress_callback,
+            )
 
         if self._looks_like_supported_document_url(url):
             return self.convert_url(url, progress_callback=progress_callback)
-        return self.convert_web_url(url, progress_callback=progress_callback)
+        return self.convert_web_url(
+            url,
+            wait_until=wait_until,
+            reject_request_pattern=reject_request_pattern,
+            progress_callback=progress_callback,
+        )
+
+    @staticmethod
+    def _build_browser_markdown_options(
+        *,
+        wait_until: BrowserWaitUntil | None,
+        reject_request_pattern: str | Sequence[str] | None,
+    ) -> dict[str, object]:
+        payload: dict[str, object] = {}
+
+        if wait_until is not None:
+            if wait_until not in VALID_BROWSER_WAIT_UNTIL:
+                allowed = ", ".join(VALID_BROWSER_WAIT_UNTIL)
+                raise ValueError(f"wait_until must be one of: {allowed}.")
+            payload["gotoOptions"] = {"waitUntil": wait_until}
+
+        if reject_request_pattern is None:
+            return payload
+
+        patterns: list[str]
+        if isinstance(reject_request_pattern, str):
+            patterns = [reject_request_pattern]
+        elif isinstance(reject_request_pattern, Sequence):
+            patterns = list(reject_request_pattern)
+        else:
+            raise ValueError("reject_request_pattern must be a string or a sequence of strings.")
+
+        if not patterns:
+            raise ValueError("reject_request_pattern must contain at least one pattern.")
+
+        normalized: list[str] = []
+        for pattern in patterns:
+            if not isinstance(pattern, str):
+                raise ValueError("reject_request_pattern must contain only strings.")
+            stripped = pattern.strip()
+            if not stripped:
+                raise ValueError("reject_request_pattern must not contain empty patterns.")
+            normalized.append(stripped)
+
+        payload["rejectRequestPattern"] = normalized
+        return payload
 
     @staticmethod
     def _cleanup(client: CloudflareClient | None, download_session: httpx.Client | None) -> None:

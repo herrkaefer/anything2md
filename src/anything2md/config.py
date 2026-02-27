@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Literal
 
 
 @dataclass(frozen=True)
@@ -21,3 +22,7 @@ class ConvertOptions:
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "max_retry_count", max(0, self.max_retry_count))
+
+
+BrowserWaitUntil = Literal["networkidle0", "networkidle2"]
+VALID_BROWSER_WAIT_UNTIL = ("networkidle0", "networkidle2")

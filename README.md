@@ -37,6 +37,14 @@ mdconverter = anything2md(account_id="xxx", api_token="xxx")
 result = mdconverter.transform("https://example.com")
 result = mdconverter.transform("https://pub-979cb28270cc461d94bc8a169d8f389d.r2.dev/somatosensory.pdf")
 result = mdconverter.transform("https://pub-979cb28270cc461d94bc8a169d8f389d.r2.dev/cat.jpeg")
+
+# Browser Rendering advanced options for webpage URLs
+result = mdconverter.transform(
+    "https://example.com",
+    url_strategy="browser",
+    wait_until="networkidle2",
+    reject_request_pattern=["/^.*\\.(css)$/", "/analytics/"],
+)
 print(result.markdown)
 ```
 
@@ -63,6 +71,7 @@ export CLOUDFLARE_API_TOKEN="your_api_token"
 uv run anything2md https://pub-979cb28270cc461d94bc8a169d8f389d.r2.dev/somatosensory.pdf
 uv run anything2md https://pub-979cb28270cc461d94bc8a169d8f389d.r2.dev/cat.jpeg -o output.md
 uv run anything2md https://example.com
+uv run anything2md https://example.com --url-strategy browser --wait-until networkidle2 --reject-request-pattern '/^.*\.(css)$/' --reject-request-pattern '/analytics/'
 ```
 
 ### Integration Test (Real Cloudflare)
