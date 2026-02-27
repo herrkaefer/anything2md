@@ -1,4 +1,14 @@
 # anything2md
+
+```text
+                     __  __    _            ___                 __
+  ____ _____  __  __/ /_/ /_  (_)___  ____ |__ \ ____ ___  ____/ /
+ / __ `/ __ \/ / / / __/ __ \/ / __ \/ __ `/_/ // __ `__ \/ __  / 
+/ /_/ / / / / /_/ / /_/ / / / / / / / /_/ / __// / / / / / /_/ /  
+\__,_/_/ /_/\__, /\__/_/ /_/_/_/ /_/\__, /____/_/ /_/ /_/\__,_/   
+           /____/                  /____/                         
+```
+
 [![CI](https://github.com/herrkaefer/anything2md/actions/workflows/ci.yml/badge.svg)](https://github.com/herrkaefer/anything2md/actions/workflows/ci.yml)
 [![PyPI version](https://img.shields.io/pypi/v/anything2md.svg)](https://pypi.org/project/anything2md/)
 [![Python >=3.10](https://img.shields.io/badge/python-%3E%3D3.10-blue.svg)](https://pypi.org/project/anything2md/)
