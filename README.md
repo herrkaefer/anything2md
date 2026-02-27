@@ -35,6 +35,8 @@ import anything2md
 
 mdconverter = anything2md(account_id="xxx", api_token="xxx")
 result = mdconverter.convert("https://example.com")
+result = mdconverter.convert("https://pub-979cb28270cc461d94bc8a169d8f389d.r2.dev/somatosensory.pdf")
+result = mdconverter.convert("https://pub-979cb28270cc461d94bc8a169d8f389d.r2.dev/cat.jpeg")
 print(result.markdown)
 ```
 
