@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 from urllib.parse import urlparse
 
-from .config import CloudflareCredentials, ConvertOptions
+from .config import ConvertOptions
 from .converter import MarkdownConverter
 from .errors import Anything2MDError
 
@@ -75,23 +75,22 @@ def main() -> None:
     )
     progress_callback = _emit_progress if args.verbose else None
 
-    converter = MarkdownConverter(
-        credentials=CloudflareCredentials(account_id, api_token),
-        options=options,
-    )
+    converter = MarkdownConverter(account_id=account_id, api_token=api_token, options=options)
     try:
         try:
+            local_or_remote_input: str | Path
             if _is_remote_url(args.input):
-                result = converter.convert_remote_url(
-                    args.input,
-                    strategy=args.url_strategy,
-                    progress_callback=progress_callback,
-                )
+                local_or_remote_input = args.input
             else:
-                result = converter.convert_file(
-                    Path(args.input).expanduser(),
-                    progress_callback=progress_callback,
-                )
+                local_or_remote_input = Path(args.input).expanduser()
+
+            result = converter.convert(
+                local_or_remote_input,
+                url_strategy=args.url_strategy,
+                progress_callback=progress_callback,
+            )
+            if isinstance(result, list):
+                raise SystemExit("CLI currently supports single-item conversion only.")
         except Anything2MDError as exc:
             print(str(exc), file=sys.stderr)
             raise SystemExit(1) from exc

@@ -39,6 +39,45 @@ def test_convert_bytes_throws_unsupported_format() -> None:
     assert exc.value.value == "note.txt"
 
 
+def test_convert_single_entry_requires_filename_for_raw_bytes() -> None:
+    converter = MarkdownConverter(
+        credentials=CloudflareCredentials(account_id="acc", api_token="token"),
+        client=make_upload_client(lambda _: httpx.Response(500)),
+        download_session=make_download_session(lambda _: httpx.Response(500)),
+    )
+
+    with pytest.raises(TypeError):
+        converter.convert(b"hello")
+
+
+def test_convert_single_entry_accepts_file_tuple() -> None:
+    def upload_handler(request: httpx.Request) -> httpx.Response:
+        payload = {
+            "result": [
+                {
+                    "name": "inline.pdf",
+                    "mimeType": "application/pdf",
+                    "format": "markdown",
+                    "tokens": 1,
+                    "data": "# Inline",
+                }
+            ],
+            "success": True,
+            "errors": [],
+            "messages": [],
+        }
+        return httpx.Response(200, json=payload)
+
+    converter = MarkdownConverter(
+        credentials=CloudflareCredentials(account_id="acc", api_token="token"),
+        client=make_upload_client(upload_handler),
+        download_session=make_download_session(lambda _: httpx.Response(500)),
+    )
+
+    result = converter.convert((b"%PDF", "inline.pdf"))
+    assert result.markdown == "# Inline"
+
+
 def test_convert_url_downloads_and_converts() -> None:
     def download_handler(request: httpx.Request) -> httpx.Response:
         assert request.url.host == "example.com"
@@ -70,6 +109,34 @@ def test_convert_url_downloads_and_converts() -> None:
     result = converter.convert_url("https://example.com/document")
     assert result.name == "downloaded.pdf"
     assert result.markdown == "# Converted"
+
+
+def test_direct_constructor_credentials_work() -> None:
+    def upload_handler(request: httpx.Request) -> httpx.Response:
+        payload = {
+            "result": [
+                {
+                    "name": "inline.pdf",
+                    "mimeType": "application/pdf",
+                    "format": "markdown",
+                    "tokens": 2,
+                    "data": "# OK",
+                }
+            ],
+            "success": True,
+            "errors": [],
+            "messages": [],
+        }
+        return httpx.Response(200, json=payload)
+
+    converter = MarkdownConverter(
+        account_id="acc",
+        api_token="token",
+        client=make_upload_client(upload_handler),
+        download_session=make_download_session(lambda _: httpx.Response(500)),
+    )
+    result = converter.convert(b"%PDF", filename="a.pdf")
+    assert result.markdown == "# OK"
 
 
 def test_convert_file() -> None:

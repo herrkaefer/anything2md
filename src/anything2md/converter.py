@@ -1,10 +1,9 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Callable
-from typing import Literal
-from typing import Sequence
+from typing import Callable, Literal, Sequence, TypeGuard
 from urllib.parse import urlparse
+import weakref
 
 import httpx
 
@@ -21,20 +20,42 @@ from .errors import (
 from .formats import from_filename, from_mime_type
 from .models import ConversionResult, SupportedFormatInfo
 
+BytesLike = bytes | bytearray | memoryview
+FileInput = tuple[BytesLike, str]
+
 
 class MarkdownConverter:
-    """Main entry point for converting files to Markdown using Workers AI."""
+    """Single-entry converter for URL/local/binary inputs."""
 
     def __init__(
         self,
-        credentials: CloudflareCredentials,
+        account_id: str | None = None,
+        api_token: str | None = None,
+        *,
+        credentials: CloudflareCredentials | None = None,
         options: ConvertOptions = ConvertOptions(),
         client: CloudflareClient | None = None,
         download_session: httpx.Client | None = None,
     ) -> None:
+        if credentials is not None and (account_id is not None or api_token is not None):
+            raise ValueError("Provide either credentials or account_id/api_token, not both.")
+
+        if credentials is None:
+            if not account_id or not api_token:
+                raise ValueError("account_id and api_token are required.")
+            credentials = CloudflareCredentials(account_id=account_id, api_token=api_token)
+
         self.options = options
         self._client = client or CloudflareClient(credentials=credentials, options=options)
         self._download_session = download_session or httpx.Client(timeout=options.timeout)
+        self._owns_client = client is None
+        self._owns_download_session = download_session is None
+        self._finalizer = weakref.finalize(
+            self,
+            MarkdownConverter._cleanup,
+            self._client if self._owns_client else None,
+            self._download_session if self._owns_download_session else None,
+        )
 
     @classmethod
     def with_cloudflare(
@@ -45,13 +66,69 @@ class MarkdownConverter:
         max_retry_count: int = 2,
         retry_base_delay: float = 1.0,
     ) -> "MarkdownConverter":
-        credentials = CloudflareCredentials(account_id=account_id, api_token=api_token)
         options = ConvertOptions(
             timeout=timeout,
             max_retry_count=max_retry_count,
             retry_base_delay=retry_base_delay,
         )
-        return cls(credentials=credentials, options=options)
+        return cls(account_id=account_id, api_token=api_token, options=options)
+
+    def __enter__(self) -> "MarkdownConverter":
+        return self
+
+    def __exit__(self, exc_type: object, exc: object, tb: object) -> None:
+        self.close()
+
+    def close(self) -> None:
+        if self._finalizer.alive:
+            self._finalizer()
+
+    def convert(
+        self,
+        input_value: str | Path | BytesLike | FileInput | Sequence[FileInput],
+        *,
+        filename: str | None = None,
+        url_strategy: Literal["auto", "download", "browser"] = "auto",
+        progress_callback: Callable[[str], None] | None = None,
+    ) -> ConversionResult | list[ConversionResult]:
+        """Convert any supported input through one API.
+
+        Supported input shapes:
+        - URL string
+        - local file path string/pathlib.Path
+        - raw bytes (requires filename=...)
+        - tuple of (bytes, filename)
+        - batch list/tuple of (bytes, filename)
+        """
+        if isinstance(input_value, (str, Path)):
+            text = str(input_value)
+            parsed = urlparse(text)
+            if parsed.scheme in {"http", "https"} and parsed.netloc:
+                return self.convert_remote_url(
+                    text,
+                    strategy=url_strategy,
+                    progress_callback=progress_callback,
+                )
+            return self.convert_file(text, progress_callback=progress_callback)
+
+        if isinstance(input_value, (bytes, bytearray, memoryview)):
+            if not filename:
+                raise TypeError("filename is required when input is raw bytes.")
+            return self.convert_bytes(
+                bytes(input_value),
+                filename,
+                progress_callback=progress_callback,
+            )
+
+        if self._is_file_input(input_value):
+            data, file_name = input_value
+            return self.convert_bytes(bytes(data), file_name, progress_callback=progress_callback)
+
+        if self._is_batch_file_input(input_value):
+            normalized = [(bytes(data), file_name) for data, file_name in input_value]
+            return self.convert_batch(normalized)
+
+        raise TypeError("Unsupported input type for convert().")
 
     def convert_url(
         self,
@@ -101,7 +178,7 @@ class MarkdownConverter:
         file_path: str | Path,
         progress_callback: Callable[[str], None] | None = None,
     ) -> ConversionResult:
-        path = Path(file_path)
+        path = Path(file_path).expanduser()
         self._notify(progress_callback, f"Reading local file: {path}")
         try:
             data = path.read_bytes()
@@ -191,16 +268,37 @@ class MarkdownConverter:
             return self.convert_url(url, progress_callback=progress_callback)
         return self.convert_web_url(url, progress_callback=progress_callback)
 
-    def convert(self, input_value: str | Path) -> ConversionResult:
-        text = str(input_value)
-        parsed = urlparse(text)
-        if parsed.scheme in {"http", "https"} and parsed.netloc:
-            return self.convert_remote_url(text, strategy="auto")
-        return self.convert_file(text)
+    @staticmethod
+    def _cleanup(client: CloudflareClient | None, download_session: httpx.Client | None) -> None:
+        seen: set[int] = set()
+        for resource in (client, download_session):
+            if resource is None:
+                continue
+            resource_id = id(resource)
+            if resource_id in seen:
+                continue
+            seen.add(resource_id)
+            try:
+                resource.close()
+            except Exception:
+                pass
 
-    def close(self) -> None:
-        self._client.close()
-        self._download_session.close()
+    @staticmethod
+    def _is_file_input(value: object) -> TypeGuard[FileInput]:
+        return (
+            isinstance(value, tuple)
+            and len(value) == 2
+            and isinstance(value[0], (bytes, bytearray, memoryview))
+            and isinstance(value[1], str)
+        )
+
+    @classmethod
+    def _is_batch_file_input(cls, value: object) -> TypeGuard[Sequence[FileInput]]:
+        if not isinstance(value, Sequence):
+            return False
+        if isinstance(value, (str, bytes, bytearray, memoryview, Path)):
+            return False
+        return all(cls._is_file_input(item) for item in value)
 
     def _inferred_filename(self, url: str, response: httpx.Response) -> str:
         candidate = Path(urlparse(url).path).name

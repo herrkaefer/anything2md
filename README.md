@@ -26,36 +26,43 @@ uv sync
 ## Library Usage
 
 ```python
-from anything2md import CloudflareCredentials, MarkdownConverter
-
-credentials = CloudflareCredentials(
-    account_id="<CLOUDFLARE_ACCOUNT_ID>",
-    api_token="<CLOUDFLARE_API_TOKEN>",
-)
-converter = MarkdownConverter(credentials=credentials)
+import anything2md
 
 # PDF example from Cloudflare docs
-result = converter.convert_url("https://pub-979cb28270cc461d94bc8a169d8f389d.r2.dev/somatosensory.pdf")
+with anything2md(account_id="<CLOUDFLARE_ACCOUNT_ID>", api_token="<CLOUDFLARE_API_TOKEN>") as converter:
+    result = converter.convert("https://pub-979cb28270cc461d94bc8a169d8f389d.r2.dev/somatosensory.pdf")
+    print(result.markdown)
+
+    # Image example from Cloudflare docs
+    image_result = converter.convert("https://pub-979cb28270cc461d94bc8a169d8f389d.r2.dev/cat.jpeg")
+    print(image_result.markdown)
+
+    # Webpage URL example:
+    # 1) try Accept: text/markdown (Markdown for Agents)
+    # 2) fallback to Cloudflare Browser Rendering Markdown endpoint
+    web_result = converter.convert("https://example.com")
+    print(web_result.markdown)
+
+    file_result = converter.convert("/path/to/file.pdf")
+    print(file_result.markdown)
+
+    # bytes input also goes through the same convert() entry
+    binary_result = converter.convert(b"%PDF-1.4 ...", filename="inline.pdf")
+    print(binary_result.markdown)
+
+    # Query live supported formats from Cloudflare
+    formats = converter.supported_formats()
+    print(formats[0].extension, formats[0].mime_type)
+```
+
+Minimal style (no explicit close needed in short-lived scripts):
+
+```python
+import anything2md
+
+mdconverter = anything2md(account_id="xxx", api_token="xxx")
+result = mdconverter.convert("https://example.com")
 print(result.markdown)
-
-# Image example from Cloudflare docs
-image_result = converter.convert_url("https://pub-979cb28270cc461d94bc8a169d8f389d.r2.dev/cat.jpeg")
-print(image_result.markdown)
-
-# Webpage URL example:
-# 1) try Accept: text/markdown (Markdown for Agents)
-# 2) fallback to Cloudflare Browser Rendering Markdown endpoint
-web_result = converter.convert_web_url("https://developers.cloudflare.com/")
-print(web_result.markdown)
-
-file_result = converter.convert_file("/path/to/file.pdf")
-print(file_result.markdown)
-
-# Query live supported formats from Cloudflare
-formats = converter.supported_formats()
-print(formats[0].extension, formats[0].mime_type)
-
-converter.close()
 ```
 
 ## Supported Formats
@@ -67,7 +74,7 @@ Based on Cloudflare docs, current supported extensions include:
 Runtime check via API:
 
 ```bash
-uv run python -c "from anything2md import CloudflareCredentials, MarkdownConverter; c=MarkdownConverter(CloudflareCredentials('<id>','<token>')); print([f.extension for f in c.supported_formats()]); c.close()"
+uv run python -c "from anything2md import MarkdownConverter; c=MarkdownConverter(account_id='<id>', api_token='<token>'); print([f.extension for f in c.supported_formats()])"
 ```
 
 ## CLI Usage
@@ -78,7 +85,7 @@ export CLOUDFLARE_API_TOKEN="your_api_token"
 
 uv run anything2md https://pub-979cb28270cc461d94bc8a169d8f389d.r2.dev/somatosensory.pdf
 uv run anything2md https://pub-979cb28270cc461d94bc8a169d8f389d.r2.dev/cat.jpeg -o output.md
-uv run anything2md https://developers.cloudflare.com/
+uv run anything2md https://example.com
 ```
 
 Run as module (alternative):
@@ -99,7 +106,7 @@ URL strategy control:
 # auto:
 # - document URL -> ai/tomarkdown
 # - webpage URL -> try Accept:text/markdown, fallback browser-rendering/markdown
-uv run anything2md --url-strategy auto https://developers.cloudflare.com/
+uv run anything2md --url-strategy auto https://example.com
 
 # force webpage URL flow (Accept:text/markdown first, fallback browser-rendering/markdown)
 uv run anything2md --url-strategy browser https://example.com
