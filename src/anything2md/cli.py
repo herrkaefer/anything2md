@@ -84,7 +84,7 @@ def main() -> None:
             else:
                 local_or_remote_input = Path(args.input).expanduser()
 
-            result = converter.convert(
+            result = converter.transform(
                 local_or_remote_input,
                 url_strategy=args.url_strategy,
                 progress_callback=progress_callback,

@@ -47,7 +47,7 @@ def test_convert_single_entry_requires_filename_for_raw_bytes() -> None:
     )
 
     with pytest.raises(TypeError):
-        converter.convert(b"hello")
+        converter.transform(b"hello")
 
 
 def test_convert_single_entry_accepts_file_tuple() -> None:
@@ -74,7 +74,7 @@ def test_convert_single_entry_accepts_file_tuple() -> None:
         download_session=make_download_session(lambda _: httpx.Response(500)),
     )
 
-    result = converter.convert((b"%PDF", "inline.pdf"))
+    result = converter.transform((b"%PDF", "inline.pdf"))
     assert result.markdown == "# Inline"
 
 
@@ -135,7 +135,7 @@ def test_direct_constructor_credentials_work() -> None:
         client=make_upload_client(upload_handler),
         download_session=make_download_session(lambda _: httpx.Response(500)),
     )
-    result = converter.convert(b"%PDF", filename="a.pdf")
+    result = converter.transform(b"%PDF", filename="a.pdf")
     assert result.markdown == "# OK"
 
 

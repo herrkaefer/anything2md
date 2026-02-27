@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "anything2md"
-version = "0.1.0"
+version = "0.1.1"
 description = "Convert documents to Markdown using Cloudflare Workers AI toMarkdown."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -30,3 +30,6 @@ anything2md = "anything2md.cli:main"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = [
+  "integration: marks tests that hit real external services",
+]

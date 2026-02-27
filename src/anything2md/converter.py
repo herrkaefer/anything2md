@@ -83,7 +83,7 @@ class MarkdownConverter:
         if self._finalizer.alive:
             self._finalizer()
 
-    def convert(
+    def transform(
         self,
         input_value: str | Path | BytesLike | FileInput | Sequence[FileInput],
         *,
@@ -91,7 +91,7 @@ class MarkdownConverter:
         url_strategy: Literal["auto", "download", "browser"] = "auto",
         progress_callback: Callable[[str], None] | None = None,
     ) -> ConversionResult | list[ConversionResult]:
-        """Convert any supported input through one API.
+        """Transform any supported input through one API.
 
         Supported input shapes:
         - URL string
@@ -128,7 +128,7 @@ class MarkdownConverter:
             normalized = [(bytes(data), file_name) for data, file_name in input_value]
             return self.convert_batch(normalized)
 
-        raise TypeError("Unsupported input type for convert().")
+        raise TypeError("Unsupported input type for transform().")
 
     def convert_url(
         self,

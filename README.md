@@ -34,9 +34,9 @@ Create a Cloudflare API Token for the target account and include these permissio
 import anything2md
 
 mdconverter = anything2md(account_id="xxx", api_token="xxx")
-result = mdconverter.convert("https://example.com")
-result = mdconverter.convert("https://pub-979cb28270cc461d94bc8a169d8f389d.r2.dev/somatosensory.pdf")
-result = mdconverter.convert("https://pub-979cb28270cc461d94bc8a169d8f389d.r2.dev/cat.jpeg")
+result = mdconverter.transform("https://example.com")
+result = mdconverter.transform("https://pub-979cb28270cc461d94bc8a169d8f389d.r2.dev/somatosensory.pdf")
+result = mdconverter.transform("https://pub-979cb28270cc461d94bc8a169d8f389d.r2.dev/cat.jpeg")
 print(result.markdown)
 ```
 
@@ -64,6 +64,19 @@ uv run anything2md https://pub-979cb28270cc461d94bc8a169d8f389d.r2.dev/somatosen
 uv run anything2md https://pub-979cb28270cc461d94bc8a169d8f389d.r2.dev/cat.jpeg -o output.md
 uv run anything2md https://example.com
 ```
+
+### Integration Test (Real Cloudflare)
+
+If both `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN` are set, integration tests automatically run real Cloudflare calls and validate that:
+
+- `result.error` is empty
+- `result.markdown` is non-empty
+
+Optional test URL overrides:
+
+- `ANYTHING2MD_TEST_PDF_URL`
+- `ANYTHING2MD_TEST_IMAGE_URL`
+- `ANYTHING2MD_TEST_WEB_URL`
 
 ## References
 

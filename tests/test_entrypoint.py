@@ -52,6 +52,6 @@ def test_callable_converter_can_convert_bytes() -> None:
         download_session=download_session,
     )
 
-    result = converter.convert(b"%PDF", filename="x.pdf")
+    result = converter.transform(b"%PDF", filename="x.pdf")
     assert result.markdown == "# ok"
     converter.close()
