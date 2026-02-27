@@ -8,20 +8,27 @@ Python package and CLI for converting URLs or local documents into Markdown usin
 
 ## Install
 
-From GitHub:
+From PyPI with `uv`:
 
 ```bash
-pip install "git+https://github.com/herrkaefer/anything2md.git"
+uv add anything2md
 ```
+
+Or from PyPI (pip):
+
+```bash
+pip install anything2md
+```
+
 
 ### Cloudflare Token Setup
 
 Create a Cloudflare API Token for the target account and include these permissions:
 
-- `Workers AI` 
-- `Browser Rendering - Edit`
+- `Workers AI` -- Read
+- `Browser Rendering` -- Edit
 
-## Library Usage
+## Usage
 
 ```python
 import anything2md
@@ -37,11 +44,7 @@ Based on Cloudflare docs, current supported extensions include:
 
 `pdf`, `jpeg/jpg`, `png`, `webp`, `svg`, `html/htm`, `xml`, `csv`, `docx`, `xlsx`, `xlsm`, `xlsb`, `xls`, `et`, `ods`, `odt`, `numbers`
 
-Runtime check via API:
-
-```bash
-uv run python -c "from anything2md import MarkdownConverter; c=MarkdownConverter(account_id='<id>', api_token='<token>'); print([f.extension for f in c.supported_formats()])"
-```
+`url` via Browser Rendering Markdown endpoint.
 
 ## Local Usage
 
