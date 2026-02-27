@@ -9,6 +9,20 @@ Cloudflare docs:
 - Browser Rendering Markdown endpoint (URL input): https://developers.cloudflare.com/browser-rendering/rest-api/markdown-endpoint/
 - Markdown for Agents (`Accept: text/markdown`): https://developers.cloudflare.com/fundamentals/reference/markdown-for-agents/
 
+## Cloudflare Token Setup
+
+Create a Cloudflare API Token for the target account and include these permissions:
+
+- `Workers AI` (used by `/ai/tomarkdown`)
+- `Browser Rendering - Edit` (used by `/browser-rendering/markdown`)
+
+Set credentials in your shell:
+
+```bash
+export CLOUDFLARE_ACCOUNT_ID="your_account_id"
+export CLOUDFLARE_API_TOKEN="your_api_token"
+```
+
 ## Install
 
 From GitHub:
