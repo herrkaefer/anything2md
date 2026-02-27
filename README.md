@@ -2,27 +2,6 @@
 
 Python package and CLI for converting URLs or local documents into Markdown using Cloudflare Workers AI `toMarkdown()`.
 
-Cloudflare docs:
-- Markdown Conversion overview: https://developers.cloudflare.com/workers-ai/features/markdown-conversion/
-- API reference (`toMarkdown`): https://developers.cloudflare.com/api/resources/ai/methods/run/#to-markdown-conversion-to-markdown
-- API reference (`supported formats`): https://developers.cloudflare.com/api/resources/ai/methods/run/#to-markdown-conversion-supported-formats
-- Browser Rendering Markdown endpoint (URL input): https://developers.cloudflare.com/browser-rendering/rest-api/markdown-endpoint/
-- Markdown for Agents (`Accept: text/markdown`): https://developers.cloudflare.com/fundamentals/reference/markdown-for-agents/
-
-## Cloudflare Token Setup
-
-Create a Cloudflare API Token for the target account and include these permissions:
-
-- `Workers AI` (used by `/ai/tomarkdown`)
-- `Browser Rendering - Edit` (used by `/browser-rendering/markdown`)
-
-Set credentials in your shell:
-
-```bash
-export CLOUDFLARE_ACCOUNT_ID="your_account_id"
-export CLOUDFLARE_API_TOKEN="your_api_token"
-```
-
 ## Install
 
 From GitHub:
@@ -31,45 +10,14 @@ From GitHub:
 pip install "git+https://github.com/herrkaefer/anything2md.git"
 ```
 
-For local development with `uv`:
+### Cloudflare Token Setup
 
-```bash
-uv sync
-```
+Create a Cloudflare API Token for the target account and include these permissions:
+
+- `Workers AI` 
+- `Browser Rendering - Edit`
 
 ## Library Usage
-
-```python
-import anything2md
-
-# PDF example from Cloudflare docs
-with anything2md(account_id="<CLOUDFLARE_ACCOUNT_ID>", api_token="<CLOUDFLARE_API_TOKEN>") as converter:
-    result = converter.convert("https://pub-979cb28270cc461d94bc8a169d8f389d.r2.dev/somatosensory.pdf")
-    print(result.markdown)
-
-    # Image example from Cloudflare docs
-    image_result = converter.convert("https://pub-979cb28270cc461d94bc8a169d8f389d.r2.dev/cat.jpeg")
-    print(image_result.markdown)
-
-    # Webpage URL example:
-    # 1) try Accept: text/markdown (Markdown for Agents)
-    # 2) fallback to Cloudflare Browser Rendering Markdown endpoint
-    web_result = converter.convert("https://example.com")
-    print(web_result.markdown)
-
-    file_result = converter.convert("/path/to/file.pdf")
-    print(file_result.markdown)
-
-    # bytes input also goes through the same convert() entry
-    binary_result = converter.convert(b"%PDF-1.4 ...", filename="inline.pdf")
-    print(binary_result.markdown)
-
-    # Query live supported formats from Cloudflare
-    formats = converter.supported_formats()
-    print(formats[0].extension, formats[0].mime_type)
-```
-
-Minimal style (no explicit close needed in short-lived scripts):
 
 ```python
 import anything2md
@@ -91,7 +39,13 @@ Runtime check via API:
 uv run python -c "from anything2md import MarkdownConverter; c=MarkdownConverter(account_id='<id>', api_token='<token>'); print([f.extension for f in c.supported_formats()])"
 ```
 
-## CLI Usage
+## Local Usage
+
+Install dependencies:
+
+```bash
+uv sync
+```
 
 ```bash
 export CLOUDFLARE_ACCOUNT_ID="your_account_id"
@@ -102,29 +56,15 @@ uv run anything2md https://pub-979cb28270cc461d94bc8a169d8f389d.r2.dev/cat.jpeg 
 uv run anything2md https://example.com
 ```
 
-Run as module (alternative):
+## References
 
-```bash
-uv run python -m anything2md https://pub-979cb28270cc461d94bc8a169d8f389d.r2.dev/somatosensory.pdf
-```
+Cloudflare docs:
+- Markdown Conversion overview: https://developers.cloudflare.com/workers-ai/features/markdown-conversion/
+- API reference (`toMarkdown`): https://developers.cloudflare.com/api/resources/ai/methods/run/#to-markdown-conversion-to-markdown
+- API reference (`supported formats`): https://developers.cloudflare.com/api/resources/ai/methods/run/#to-markdown-conversion-supported-formats
+- Browser Rendering Markdown endpoint (URL input): https://developers.cloudflare.com/browser-rendering/rest-api/markdown-endpoint/
+- Markdown for Agents (`Accept: text/markdown`): https://developers.cloudflare.com/fundamentals/reference/markdown-for-agents/
 
-Installed command (after `pip install` or from PyPI):
+## License
 
-```bash
-anything2md https://pub-979cb28270cc461d94bc8a169d8f389d.r2.dev/somatosensory.pdf
-```
-
-URL strategy control:
-
-```bash
-# auto:
-# - document URL -> ai/tomarkdown
-# - webpage URL -> try Accept:text/markdown, fallback browser-rendering/markdown
-uv run anything2md --url-strategy auto https://example.com
-
-# force webpage URL flow (Accept:text/markdown first, fallback browser-rendering/markdown)
-uv run anything2md --url-strategy browser https://example.com
-
-# force remote download + ai/tomarkdown
-uv run anything2md --url-strategy download https://example.com/sample.pdf
-```
+MIT
