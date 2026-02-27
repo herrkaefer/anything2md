@@ -84,19 +84,6 @@ uv run anything2md https://example.com
 uv run anything2md https://example.com --url-strategy browser --wait-until networkidle2 --reject-request-pattern '/^.*\.(css)$/' --reject-request-pattern '/analytics/'
 ```
 
-### Integration Test (Real Cloudflare)
-
-If both `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN` are set, integration tests automatically run real Cloudflare calls and validate that:
-
-- `result.error` is empty
-- `result.markdown` is non-empty
-
-Optional test URL overrides:
-
-- `ANYTHING2MD_TEST_PDF_URL`
-- `ANYTHING2MD_TEST_IMAGE_URL`
-- `ANYTHING2MD_TEST_WEB_URL`
-
 ## References
 
 Cloudflare docs:
