@@ -242,7 +242,16 @@ class MarkdownConverter:
             )
 
         self._notify(progress_callback, f"Rendering webpage URL via Cloudflare Browser Rendering: {url}")
-        markdown = self._client.markdown_from_url(url)
+        try:
+            markdown = self._client.markdown_from_url(url)
+        except HTTPError as exc:
+            if exc.status_code in {401, 403}:
+                self._notify(
+                    progress_callback,
+                    "Browser Rendering auth failed, falling back to download + Workers AI toMarkdown.",
+                )
+                return self.convert_url(url, progress_callback=progress_callback)
+            raise
         self._notify(progress_callback, "Webpage conversion completed.")
         return ConversionResult(
             name=url,

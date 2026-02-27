@@ -332,6 +332,58 @@ def test_convert_web_url_falls_back_to_browser_on_markdown_for_agents_exception(
     assert result.mime_type == "text/html"
 
 
+def test_convert_web_url_falls_back_to_download_on_browser_auth_error() -> None:
+    state = {"calls": 0}
+
+    def download_handler(request: httpx.Request) -> httpx.Response:
+        state["calls"] += 1
+        if state["calls"] == 1:
+            assert request.headers.get("accept") == "text/markdown"
+            return httpx.Response(406, text="not markdown")
+        return httpx.Response(200, content=b"<html><body>hi</body></html>", headers={"Content-Type": "text/html"})
+
+    def upload_handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "POST" and str(request.url).endswith("/browser-rendering/markdown"):
+            return httpx.Response(
+                401,
+                json={
+                    "result": None,
+                    "success": False,
+                    "errors": [{"code": 10000, "message": "Authentication error"}],
+                    "messages": [],
+                },
+            )
+        if request.method == "POST" and str(request.url).endswith("/ai/tomarkdown"):
+            return httpx.Response(
+                200,
+                json={
+                    "result": [
+                        {
+                            "name": "downloaded.html",
+                            "mimeType": "text/html",
+                            "format": "markdown",
+                            "tokens": 5,
+                            "data": "# HTML fallback",
+                        }
+                    ],
+                    "success": True,
+                    "errors": [],
+                    "messages": [],
+                },
+            )
+        raise AssertionError(f"Unexpected request: {request.method} {request.url}")
+
+    converter = MarkdownConverter(
+        credentials=CloudflareCredentials(account_id="acc", api_token="token"),
+        client=make_upload_client(upload_handler),
+        download_session=make_download_session(download_handler),
+    )
+
+    result = converter.convert_web_url("https://example.com/page")
+    assert result.markdown == "# HTML fallback"
+    assert result.mime_type == "text/html"
+
+
 def test_convert_remote_url_auto_uses_download_for_document_urls() -> None:
     def download_handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(200, content=b"%PDF-1.4", headers={"Content-Type": "application/pdf"})
