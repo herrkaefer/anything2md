@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import time
+from typing import Any
 from typing import Sequence
 
 import httpx
@@ -8,7 +9,7 @@ import httpx
 from .config import CloudflareCredentials, ConvertOptions
 from .errors import APIError, HTTPError, InvalidResponseError, NetworkError, UnsupportedFormatError
 from .formats import from_filename
-from .models import ConversionResult
+from .models import ConversionResult, SupportedFormatInfo
 
 
 _RETRYABLE_NETWORK_EXCEPTIONS = (
@@ -49,16 +50,58 @@ class CloudflareClient:
             f"https://api.cloudflare.com/client/v4/accounts/{self.credentials.account_id}/"
             "ai/tomarkdown"
         )
-        headers = {"Authorization": f"Bearer {self.credentials.api_token}"}
+        response = self._request_with_retry(
+            method="POST",
+            endpoint=endpoint,
+            files=multipart,
+        )
+
+        payload = self._decode_success_payload(response)
+        result_payload = payload.get("result", [])
+        if not isinstance(result_payload, list):
+            raise InvalidResponseError()
+
+        try:
+            return [ConversionResult.from_api_item(item) for item in result_payload]
+        except (TypeError, ValueError, KeyError) as exc:
+            raise InvalidResponseError() from exc
+
+    def supported_formats(self) -> list[SupportedFormatInfo]:
+        endpoint = (
+            f"https://api.cloudflare.com/client/v4/accounts/{self.credentials.account_id}/"
+            "ai/tomarkdown/supported"
+        )
+        response = self._request_with_retry(
+            method="GET",
+            endpoint=endpoint,
+        )
+
+        payload = self._decode_success_payload(response)
+        result_payload = payload.get("result", [])
+        if not isinstance(result_payload, list):
+            raise InvalidResponseError()
+
+        try:
+            return [SupportedFormatInfo.from_api_item(item) for item in result_payload]
+        except (TypeError, ValueError, KeyError) as exc:
+            raise InvalidResponseError() from exc
+
+    def close(self) -> None:
+        self._session.close()
+
+    def _request_with_retry(self, method: str, endpoint: str, **kwargs: Any) -> httpx.Response:
+        headers = kwargs.pop("headers", {}) or {}
+        headers["Authorization"] = f"Bearer {self.credentials.api_token}"
 
         attempt = 0
         while True:
             try:
-                response = self._session.post(
-                    endpoint,
+                response = self._session.request(
+                    method=method,
+                    url=endpoint,
                     headers=headers,
-                    files=multipart,
                     timeout=self.options.timeout,
+                    **kwargs,
                 )
             except _RETRYABLE_NETWORK_EXCEPTIONS as exc:
                 if self._should_retry_network(attempt):
@@ -75,28 +118,22 @@ class CloudflareClient:
                     attempt += 1
                     continue
                 raise HTTPError(response.status_code, response.text)
+            return response
 
-            try:
-                payload = response.json()
-            except ValueError as exc:
-                raise InvalidResponseError() from exc
+    def _decode_success_payload(self, response: httpx.Response) -> dict[str, Any]:
+        try:
+            payload = response.json()
+        except ValueError as exc:
+            raise InvalidResponseError() from exc
 
-            success = bool(payload.get("success", False))
-            if not success:
-                messages = self._extract_messages(payload)
-                raise APIError(messages)
+        if not isinstance(payload, dict):
+            raise InvalidResponseError()
 
-            result_payload = payload.get("result", [])
-            if not isinstance(result_payload, list):
-                raise InvalidResponseError()
-
-            try:
-                return [ConversionResult.from_api_item(item) for item in result_payload]
-            except (TypeError, ValueError, KeyError) as exc:
-                raise InvalidResponseError() from exc
-
-    def close(self) -> None:
-        self._session.close()
+        success = bool(payload.get("success", False))
+        if not success:
+            messages = self._extract_messages(payload)
+            raise APIError(messages)
+        return payload
 
     def _should_retry_status(self, status_code: int, attempt: int) -> bool:
         return attempt < self.options.max_retry_count and (

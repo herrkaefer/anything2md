@@ -8,7 +8,7 @@ import pytest
 from anything2md.client import CloudflareClient
 from anything2md.config import CloudflareCredentials, ConvertOptions
 from anything2md.converter import MarkdownConverter
-from anything2md.errors import FileReadError, UnsupportedFormatError
+from anything2md.errors import APIError, FileReadError, UnsupportedFormatError
 
 
 def make_upload_client(upload_handler) -> CloudflareClient:
@@ -46,7 +46,15 @@ def test_convert_url_downloads_and_converts() -> None:
 
     def upload_handler(request: httpx.Request) -> httpx.Response:
         payload = {
-            "result": [{"name": "downloaded.pdf", "mimeType": "application/pdf", "tokens": 9, "data": "# Converted"}],
+            "result": [
+                {
+                    "name": "downloaded.pdf",
+                    "mimeType": "application/pdf",
+                    "format": "markdown",
+                    "tokens": 9,
+                    "data": "# Converted",
+                }
+            ],
             "success": True,
             "errors": [],
             "messages": [],
@@ -67,7 +75,15 @@ def test_convert_url_downloads_and_converts() -> None:
 def test_convert_file() -> None:
     def upload_handler(request: httpx.Request) -> httpx.Response:
         payload = {
-            "result": [{"name": "file.pdf", "mimeType": "application/pdf", "tokens": 3, "data": "# File"}],
+            "result": [
+                {
+                    "name": "file.pdf",
+                    "mimeType": "application/pdf",
+                    "format": "markdown",
+                    "tokens": 3,
+                    "data": "# File",
+                }
+            ],
             "success": True,
             "errors": [],
             "messages": [],
@@ -116,3 +132,56 @@ def test_convert_empty_batch_returns_empty_without_network() -> None:
 
     assert converter.convert_batch([]) == []
     assert state["calls"] == 0
+
+
+def test_convert_bytes_raises_api_error_for_per_file_error_result() -> None:
+    def upload_handler(request: httpx.Request) -> httpx.Response:
+        payload = {
+            "result": [
+                {
+                    "name": "bad.pdf",
+                    "mimeType": "application/pdf",
+                    "format": "error",
+                    "error": "OCR failed",
+                }
+            ],
+            "success": True,
+            "errors": [],
+            "messages": [],
+        }
+        return httpx.Response(200, json=payload)
+
+    converter = MarkdownConverter(
+        credentials=CloudflareCredentials(account_id="acc", api_token="token"),
+        client=make_upload_client(upload_handler),
+        download_session=make_download_session(lambda _: httpx.Response(500)),
+    )
+
+    with pytest.raises(APIError) as exc:
+        converter.convert_bytes(b"%PDF", "sample.pdf")
+
+    assert exc.value.messages == ["OCR failed"]
+
+
+def test_supported_formats_passthrough() -> None:
+    def upload_handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "GET" and str(request.url).endswith("/ai/tomarkdown/supported"):
+            payload = {
+                "result": [{"extension": "pdf", "mimeType": "application/pdf"}],
+                "success": True,
+                "errors": [],
+                "messages": [],
+            }
+            return httpx.Response(200, json=payload)
+        raise AssertionError(f"Unexpected request: {request.method} {request.url}")
+
+    converter = MarkdownConverter(
+        credentials=CloudflareCredentials(account_id="acc", api_token="token"),
+        client=make_upload_client(upload_handler),
+        download_session=make_download_session(lambda _: httpx.Response(500)),
+    )
+
+    result = converter.supported_formats()
+    assert len(result) == 1
+    assert result[0].extension == "pdf"
+    assert result[0].mime_type == "application/pdf"

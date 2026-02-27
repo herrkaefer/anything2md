@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import json
-
 import httpx
 import pytest
 
@@ -26,7 +24,15 @@ def test_to_markdown_success_decodes_data_as_markdown() -> None:
         assert request.headers["Content-Type"].startswith("multipart/form-data; boundary=")
 
         payload = {
-            "result": [{"name": "file.pdf", "mimeType": "application/pdf", "tokens": 12, "data": "# Markdown"}],
+            "result": [
+                {
+                    "name": "file.pdf",
+                    "mimeType": "application/pdf",
+                    "format": "markdown",
+                    "tokens": 12,
+                    "data": "# Markdown",
+                }
+            ],
             "success": True,
             "errors": [],
             "messages": [],
@@ -56,7 +62,15 @@ def test_to_markdown_retries_on_429_then_succeeds() -> None:
             return httpx.Response(429, text="rate limited")
 
         payload = {
-            "result": [{"name": "file.pdf", "mimeType": "application/pdf", "tokens": 2, "data": "# Retry Success"}],
+            "result": [
+                {
+                    "name": "file.pdf",
+                    "mimeType": "application/pdf",
+                    "format": "markdown",
+                    "tokens": 2,
+                    "data": "# Retry Success",
+                }
+            ],
             "success": True,
             "errors": [],
             "messages": [],
@@ -78,7 +92,15 @@ def test_to_markdown_retries_network_error_then_succeeds() -> None:
             raise httpx.ReadTimeout("timeout", request=request)
 
         payload = {
-            "result": [{"name": "file.pdf", "mimeType": "application/pdf", "tokens": 2, "data": "# Retry Success"}],
+            "result": [
+                {
+                    "name": "file.pdf",
+                    "mimeType": "application/pdf",
+                    "format": "markdown",
+                    "tokens": 2,
+                    "data": "# Retry Success",
+                }
+            ],
             "success": True,
             "errors": [],
             "messages": [],
@@ -133,3 +155,50 @@ def test_to_markdown_throws_api_error_when_success_false() -> None:
         client.to_markdown([(b"x", "file.pdf")])
 
     assert exc.value.messages == ["invalid token"]
+
+
+def test_to_markdown_supports_per_file_error_result_shape() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        payload = {
+            "result": [
+                {
+                    "name": "broken.pdf",
+                    "mimeType": "application/pdf",
+                    "format": "error",
+                    "error": "Failed to convert file",
+                }
+            ],
+            "success": True,
+            "errors": [],
+            "messages": [],
+        }
+        return httpx.Response(200, json=payload)
+
+    client = make_client(handler)
+    results = client.to_markdown([(b"x", "file.pdf")])
+    assert len(results) == 1
+    assert results[0].format == "error"
+    assert results[0].error == "Failed to convert file"
+    assert results[0].markdown == ""
+    assert results[0].tokens is None
+
+
+def test_supported_formats_returns_endpoint_result() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.method == "GET"
+        assert str(request.url).endswith("/ai/tomarkdown/supported")
+        payload = {
+            "result": [
+                {"extension": "pdf", "mimeType": "application/pdf"},
+                {"extension": "jpeg", "mimeType": "image/jpeg"},
+            ],
+            "success": True,
+            "errors": [],
+            "messages": [],
+        }
+        return httpx.Response(200, json=payload)
+
+    client = make_client(handler)
+    result = client.supported_formats()
+    assert [item.extension for item in result] == ["pdf", "jpeg"]
+    assert [item.mime_type for item in result] == ["application/pdf", "image/jpeg"]

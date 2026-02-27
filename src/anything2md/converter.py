@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Callable
 from typing import Sequence
 from urllib.parse import urlparse
 
@@ -9,6 +10,7 @@ import httpx
 from .client import CloudflareClient
 from .config import CloudflareCredentials, ConvertOptions
 from .errors import (
+    APIError,
     FileReadError,
     HTTPError,
     InvalidResponseError,
@@ -16,7 +18,7 @@ from .errors import (
     UnsupportedFormatError,
 )
 from .formats import from_filename, from_mime_type
-from .models import ConversionResult
+from .models import ConversionResult, SupportedFormatInfo
 
 
 class MarkdownConverter:
@@ -50,7 +52,12 @@ class MarkdownConverter:
         )
         return cls(credentials=credentials, options=options)
 
-    def convert_url(self, url: str) -> ConversionResult:
+    def convert_url(
+        self,
+        url: str,
+        progress_callback: Callable[[str], None] | None = None,
+    ) -> ConversionResult:
+        self._notify(progress_callback, f"Downloading URL: {url}")
         try:
             response = self._download_session.get(url, timeout=self.options.timeout)
         except httpx.HTTPError as exc:
@@ -60,29 +67,56 @@ class MarkdownConverter:
             raise HTTPError(response.status_code, response.text)
 
         filename = self._inferred_filename(url, response)
-        return self.convert_bytes(response.content, filename)
+        self._notify(
+            progress_callback,
+            f"Downloaded {len(response.content)} bytes, inferred filename '{filename}'.",
+        )
+        return self.convert_bytes(
+            response.content,
+            filename,
+            progress_callback=progress_callback,
+        )
 
-    def convert_bytes(self, data: bytes, filename: str) -> ConversionResult:
+    def convert_bytes(
+        self,
+        data: bytes,
+        filename: str,
+        progress_callback: Callable[[str], None] | None = None,
+    ) -> ConversionResult:
         if from_filename(filename) is None:
             raise UnsupportedFormatError(filename)
+        self._notify(progress_callback, f"Uploading '{filename}' to Cloudflare Workers AI.")
         results = self._client.to_markdown([(data, filename)])
         if not results:
             raise InvalidResponseError()
-        return results[0]
+        result = results[0]
+        if result.is_error:
+            raise APIError([result.error or f"Conversion failed for file: {filename}"])
+        self._notify(progress_callback, "Conversion completed.")
+        return result
 
-    def convert_file(self, file_path: str | Path) -> ConversionResult:
+    def convert_file(
+        self,
+        file_path: str | Path,
+        progress_callback: Callable[[str], None] | None = None,
+    ) -> ConversionResult:
         path = Path(file_path)
+        self._notify(progress_callback, f"Reading local file: {path}")
         try:
             data = path.read_bytes()
         except OSError as exc:
             raise FileReadError(exc) from exc
-        return self.convert_bytes(data, path.name)
+        self._notify(progress_callback, f"Read {len(data)} bytes from local file.")
+        return self.convert_bytes(data, path.name, progress_callback=progress_callback)
 
     def convert_batch(self, files: Sequence[tuple[bytes, str]]) -> list[ConversionResult]:
         for _, filename in files:
             if from_filename(filename) is None:
                 raise UnsupportedFormatError(filename)
         return self._client.to_markdown(files)
+
+    def supported_formats(self) -> list[SupportedFormatInfo]:
+        return self._client.supported_formats()
 
     def convert(self, input_value: str | Path) -> ConversionResult:
         text = str(input_value)
@@ -106,3 +140,8 @@ class MarkdownConverter:
             return f"downloaded.{by_mime.file_extension}"
 
         return candidate or "downloaded"
+
+    @staticmethod
+    def _notify(callback: Callable[[str], None] | None, message: str) -> None:
+        if callback is not None:
+            callback(message)

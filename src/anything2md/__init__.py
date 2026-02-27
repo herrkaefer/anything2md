@@ -11,7 +11,7 @@ from .errors import (
     NetworkError,
     UnsupportedFormatError,
 )
-from .models import ConversionResult
+from .models import ConversionResult, SupportedFormatInfo
 
 SwiftToMarkdownConverter = MarkdownConverter
 
@@ -26,6 +26,7 @@ __all__ = [
     "CloudflareCredentials",
     "ConvertOptions",
     "ConversionResult",
+    "SupportedFormatInfo",
     "MarkdownConverter",
     "SwiftToMarkdownConverter",
 ]
