@@ -4,6 +4,14 @@ Python package and CLI for converting URLs or local documents into Markdown usin
 
 ## Install
 
+From GitHub:
+
+```bash
+pip install "git+https://github.com/herrkaefer/anything2md.git"
+```
+
+For local development:
+
 ```bash
 pip install -e .
 ```
@@ -19,7 +27,7 @@ credentials = CloudflareCredentials(
 )
 converter = MarkdownConverter(credentials=credentials)
 
-result = converter.convert_url("https://example.com/file.pdf")
+result = converter.convert_url("https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf")
 print(result.markdown)
 
 file_result = converter.convert_file("/path/to/file.pdf")
@@ -34,6 +42,6 @@ converter.close()
 export CLOUDFLARE_ACCOUNT_ID="your_account_id"
 export CLOUDFLARE_API_TOKEN="your_api_token"
 
-anything2md https://example.com/file.pdf
+anything2md https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf
 anything2md /path/to/file.pdf -o output.md
 ```
