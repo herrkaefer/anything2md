@@ -1,7 +1,7 @@
 # anything2md
 [![CI](https://github.com/herrkaefer/anything2md/actions/workflows/ci.yml/badge.svg)](https://github.com/herrkaefer/anything2md/actions/workflows/ci.yml)
 [![PyPI version](https://img.shields.io/pypi/v/anything2md.svg)](https://pypi.org/project/anything2md/)
-[![Python](https://img.shields.io/pypi/pyversions/anything2md.svg)](https://pypi.org/project/anything2md/)
+[![Python >=3.10](https://img.shields.io/badge/python-%3E%3D3.10-blue.svg)](https://pypi.org/project/anything2md/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 
 Python package and CLI for converting URLs or local documents into Markdown using Cloudflare Workers AI `toMarkdown()`.
